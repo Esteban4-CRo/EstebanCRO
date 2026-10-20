@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOSTS_FILE="/etc/hosts"
+TAG_BEGIN="# [settarget] BEGIN"
+TAG_END="# [settarget] END"
+
+require_root() {
+  if [[ $EUID -ne 0 ]]; then
+    # reejecuta con sudo preservando args
+    exec sudo -- "$0" "$@"
+  fi
+}
+
+backup_hosts() {
+  local ts
+  ts="$(date +%F-%H%M%S)"
+  cp -f "$HOSTS_FILE" "${HOSTS_FILE}.bak-${ts}"
+}
+
+# Escribe un nuevo contenido (stdin) dentro del bloque marcado.
+write_block() {
+  local tmp; tmp="$(mktemp)"
+  # Quita bloque previo (si existe)
+  awk -v b="$TAG_BEGIN" -v e="$TAG_END" '
+    BEGIN{skip=0}
+    $0==b{skip=1; next}
+    $0==e{skip=0; next}
+    skip==0{print}
+  ' "$HOSTS_FILE" > "$tmp"
+
+  # Añade bloque nuevo al final (si hay contenido en stdin)
+  if [[ -s /dev/stdin ]]; then
+    {
+      cat "$tmp"
+      echo "$TAG_BEGIN"
+      cat
+      echo "$TAG_END"
+    } | tee "$tmp" >/dev/null
+  fi
+
+  backup_hosts
+  cat "$tmp" | sudo tee "$HOSTS_FILE" >/dev/null
+  rm -f "$tmp"
+}
+
+# Devuelve solo el contenido del bloque (sin las marcas)
+read_block() {
+  awk -v b="$TAG_BEGIN" -v e="$TAG_END" '
+    $0==b{inblk=1; next}
+    $0==e{inblk=0; next}
+    inblk{print}
+  ' "$HOSTS_FILE" 2>/dev/null || true
+}
+
+# Normaliza host a minúsculas y sin espacios
+norm_host() { tr '[:upper:]' '[:lower:]' <<<"$1" | tr -s ' ' ; }
+
+cmd_help() {
+  cat <<EOF
+Uso:
+  settarget <IP> <HOST>      # Activa un solo target (reemplaza el anterior)
+  settarget add <IP> <HOST>  # Añade sin borrar otros
+  settarget remove <HOST>    # Elimina un host del bloque
+  settarget list             # Muestra el bloque gestionado
+  settarget clear            # Borra todo el bloque gestionado
+Notas:
+- Edita de forma segura /etc/hosts entre marcas "$TAG_BEGIN" ... "$TAG_END".
+- Crea backups en /etc/hosts.bak-YYYY-MM-DD-HHMMSS
+EOF
+}
+
+main() {
+  case "${1:-}" in
+    help|-h|--help|"")
+      cmd_help
+      ;;
+
+    list)
+      read_block || true
+      ;;
+
+    clear)
+      require_root "$@"
+      # Reescribe /etc/hosts sin el bloque
+      awk -v b="$TAG_BEGIN" -v e="$TAG_END" '
+        BEGIN{skip=0}
+        $0==b{skip=1; next}
+        $0==e{skip=0; next}
+        skip==0{print}
+      ' "$HOSTS_FILE" | (backup_hosts; sudo tee "$HOSTS_FILE" >/dev/null)
+      echo "✔ Bloque [settarget] eliminado de $HOSTS_FILE"
+      ;;
+
+    remove)
+      require_root "$@"
+      [[ $# -ge 2 ]] || { echo "Uso: settarget remove <HOST>"; exit 1; }
+      host="$(norm_host "$2")"
+      read_block | awk -v h="$host" '
+        { if (tolower($2) != h) print }
+      ' | write_block
+      echo "✔ Eliminado: $host"
+      ;;
+
+    add)
+      require_root "$@"
+      [[ $# -ge 3 ]] || { echo "Uso: settarget add <IP> <HOST>"; exit 1; }
+      ip="$2"; host="$(norm_host "$3")"
+      # Filtra duplicados y añade
+      { read_block | awk -v h="$host" 'tolower($2)!=h'; echo "$ip $host"; } \
+        | awk 'NF' | write_block
+      echo "✔ Añadido: $ip $host"
+      ;;
+
+    *)
+      # Modo por defecto: 1 solo target activo (reemplaza todo el bloque)
+      # Uso: settarget <IP> <HOST>
+      [[ $# -ge 2 ]] || { echo "Uso: settarget <IP> <HOST>"; exit 1; }
+      require_root "$@"
+      ip="$1"; host="$(norm_host "$2")"
+      printf "%s %s\n" "$ip" "$host" | write_block
+      echo "✔ Target activo: $ip $host"
+      ;;
+  esac
+}
+
+main "$@"
+

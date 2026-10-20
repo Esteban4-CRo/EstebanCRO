@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -u
+
+TARGET_FILE="$HOME/.config/bin/target"
+ip=$(awk '{print $1}' "$TARGET_FILE" 2>/dev/null || true)
+name=$(awk '{print $2}' "$TARGET_FILE" 2>/dev/null || true)
+dir="$HOME/HTB/${name:-$ip}"
+
+sin_target() {
+  rofi -e "No hay target. Usa: settarget IP NOMBRE"
+  exit 1
+}
+
+sel=$(printf '%s\n' \
+  "Escaneo rápido (nmap)" \
+  "Escaneo de todos los puertos" \
+  "Abrir carpeta de la máquina" \
+  "Cambiar fondo" \
+  "Cambiar tema claro/oscuro" \
+  "Reiniciar barra" | rofi -dmenu -i -p "Herramientas")
+
+case "$sel" in
+  "Escaneo rápido"*)
+    [[ -n "$ip" ]] || sin_target
+    mkdir -p "$dir/nmap"
+    kitty --hold nmap -sC -sV -oN "$dir/nmap/rapido" "$ip" &
+    ;;
+  "Escaneo de todos"*)
+    [[ -n "$ip" ]] || sin_target
+    mkdir -p "$dir/nmap"
+    kitty --hold nmap -p- --min-rate 5000 -oN "$dir/nmap/todos" "$ip" &
+    ;;
+  "Abrir carpeta"*)
+    [[ -n "$ip" ]] || sin_target
+    mkdir -p "$dir"
+    kitty --directory "$dir" &
+    ;;
+  "Cambiar fondo") "$HOME/.local/bin/setwall" pick ;;
+  "Cambiar tema"*) "$HOME/.local/bin/tema" ;;
+  "Reiniciar barra") "$HOME/.config/polybar/launch.sh" & ;;
+esac

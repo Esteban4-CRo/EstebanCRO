@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# wall - cambia el wallpaper y recuerda cuál fue el último.
+# Uso:
+#   wall random        -> uno al azar
+#   wall pick          -> menú rofi para elegir
+#   wall restore       -> vuelve a poner el último (úsalo en bspwmrc)
+#   wall /ruta/img.png -> uno concreto
+
+DIR="$HOME/Downloads/Wallpaper"
+CACHE="$HOME/.cache/wall_current"
+
+lista() {
+  find "$DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | sort
+}
+
+case "${1:-random}" in
+  random)
+    img=$(lista | shuf -n 1)
+    ;;
+  pick)
+    sel=$(lista | sed "s|^$DIR/||" | rofi -dmenu -i -p "wallpaper")
+    [[ -n "$sel" ]] || exit 0          # Esc = no hacer nada
+    img="$DIR/$sel"
+    ;;
+  restore)
+    img=$(cat "$CACHE" 2>/dev/null)
+    [[ -f "$img" ]] || img=$(lista | shuf -n 1)   # si no hay último, uno al azar
+    ;;
+  *)
+    img="$1"
+    ;;
+esac
+
+[[ -f "$img" ]] || { echo "No encuentro imagen: $img" >&2; exit 1; }
+
+feh --bg-fill "$img"
+mkdir -p "$(dirname "$CACHE")"
+echo "$img" > "$CACHE"

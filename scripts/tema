@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+COLORES="$HOME/.config/polybar/colors.ini"
+ESTADO="$HOME/.cache/tema"
+SCRIPTS=("$HOME/.config/bin/ethernet_status.sh" "$HOME/.config/bin/htb_status.sh" "$HOME/.config/bin/htb_target.sh")
+
+actual=$(cat "$ESTADO" 2>/dev/null || echo claro)
+modo="${1:-}"
+if [[ -z "$modo" ]]; then
+  [[ "$actual" == "claro" ]] && modo=oscuro || modo=claro
+fi
+
+case "$modo" in
+  claro)  fondo="#FFFFFFFF"; texto="#FF000000"; viejo="#ffffff"; nuevo="#000000" ;;
+  oscuro) fondo="#FF000000"; texto="#FFFFFFFF"; viejo="#000000"; nuevo="#ffffff" ;;
+  *) echo "Uso: tema [claro|oscuro]" >&2; exit 1 ;;
+esac
+
+sed -i "s/^bg = .*/bg = $fondo/; s/^white = .*/white = $texto/" "$COLORES"
+sed -i "s/%{F$viejo}/%{F$nuevo}/Ig" "${SCRIPTS[@]}"
+mkdir -p "$(dirname "$ESTADO")"
+echo "$modo" > "$ESTADO"
+"$HOME/.config/polybar/launch.sh" &

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NAME="${1:?Uso: newbox nombre [ip]}"
+IP="${2:-}"
+DIR="$HOME/HTB/$NAME"
+
+[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Nombre inválido: usa letras, números, punto o guion" >&2; exit 1; }
+[[ -z "$IP" || "$IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "La IP no parece válida: $IP" >&2; exit 1; }
+
+mkdir -p "$DIR"/{nmap,content,exploits,scripts}
+
+if [[ -n "$IP" ]]; then
+  echo "$IP" > "$DIR/ip.txt"
+  echo "$IP $NAME" > "$HOME/.config/bin/target"
+fi
+
+echo "Carpeta lista: $DIR" >&2
+echo "$DIR"
