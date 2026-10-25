@@ -6,7 +6,7 @@
 #   wall restore       -> vuelve a poner el último (úsalo en bspwmrc)
 #   wall /ruta/img.png -> uno concreto
 
-DIR="$HOME/Downloads/Wallpaper"
+DIR="$HOME/Pictures/wallpapers"
 CACHE="$HOME/.cache/wall_current"
 
 lista() {
